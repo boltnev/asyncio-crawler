@@ -7,34 +7,35 @@ import aiohttp
 from lxml import html
 
 
-def extract_links(rooturl, text):
-    try:
-        dom = html.fromstring(text)
-    except ValueError:
-        return []
-    links = []
-    for a in dom.findall(".//a"):
-        href = a.attrib.get('href', '')
-        if href.startswith("/"):
-            link = rooturl+href.strip()
-            if link not in links:
-                links.append(link)
-    return links
-
-
-def info(url, resp, num_worker):
-    print("{} STATUS:{} {}".format(num_worker, resp.status, url))
-
-
 class Crawler:
 
-    def __init__(self, rooturl, loop, max_workers=10):
+    def __init__(self, rooturl, loop, max_workers=10, blacklist=[]):
         self.rooturl = rooturl
         self.loop = loop
         self.queue = [self.rooturl]
         self.in_process = []
-        self.seen = []
+        self.seen = blacklist
         self.max_workers = max_workers
+
+    def info(self, url, resp, num_worker):
+        print("{} STATUS:{} {}".format(num_worker, resp.status, url))
+
+    def process_content(self, headers, content):
+        pass
+
+    def extract_links(self, rooturl, text):
+        try:
+            dom = html.fromstring(text)
+        except ValueError:
+            return []
+        links = []
+        for a in dom.findall(".//a"):
+            href = a.attrib.get('href', '')
+            if href.startswith("/"):
+                link = rooturl+href.strip()
+                if link not in links:
+                    links.append(link)
+        return links
 
     async def work(self, session, num_worker):
         while self.queue or self.in_process:
@@ -49,11 +50,11 @@ class Crawler:
     async def handle_url(self, url, session, num_worker):
         #print("{} start handling {}".format(num_worker, url))
         async with session.get(url) as resp:
-            info(url, resp, num_worker)
+            self.info(url, resp, num_worker)
             self.seen.append(url)
             if resp.status // 100 == 2:
                 html = await resp.text()
-                links = extract_links(self.rooturl, html)
+                links = self.extract_links(self.rooturl, html)
                 for link in links:
                     if link not in self.queue \
                         and link not in self.seen \
